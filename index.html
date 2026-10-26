@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>银河开发者平台 - 智能PRD系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        .tree-node { cursor: pointer; transition: all 0.2s; }
+        .tree-node:hover { background: #eff6ff; }
+        .tree-node.active { background: #dbeafe; border-left: 3px solid #3b82f6; }
+        .prose h3 { margin-top: 1.5rem; margin-bottom: 0.75rem; font-size: 1.125rem; font-weight: 600; }
+        .prose h4 { margin-top: 1rem; margin-bottom: 0.5rem; font-size: 1rem; font-weight: 600; }
+        .prose p { margin-bottom: 0.75rem; line-height: 1.6; }
+        .prose ul, .prose ol { margin-left: 1.5rem; margin-bottom: 0.75rem; }
+        .prose li { margin-bottom: 0.25rem; }
+        .prose table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+        .prose th, .prose td { border: 1px solid #e5e7eb; padding: 0.5rem; text-align: left; }
+        .prose th { background: #f9fafb; font-weight: 600; }
+        .mode-tab { padding: 0.5rem 1rem; border-radius: 0.5rem; cursor: pointer; transition: all 0.2s; }
+        .mode-tab.active { background: #3b82f6; color: white; }
+        .mode-tab:not(.active) { background: #f3f4f6; color: #6b7280; }
+        .mode-tab:not(.active):hover { background: #e5e7eb; }
+        .publish-status { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen overflow-hidden">
+    <div id="app" class="h-full flex flex-col">
+        <!-- 顶部导航 -->
+        <header class="bg-white border-b border-gray-200 px-6 py-3 flex-shrink-0">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-4">
+                    <h1 class="text-xl font-bold text-gray-900">
+                        <i class="fas fa-rocket text-blue-500 mr-2"></i>
+                        银河开发者平台 PRD系统
+                    </h1>
+                    <span class="text-sm text-gray-500">v2.3</span>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <button onclick="showSettings()" class="bg-gray-100 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-200">
+                        <i class="fas fa-cog mr-1"></i> 设置
+                    </button>
+                    <button onclick="publishToGitHub()" class="bg-green-500 text-white px-4 py-2 rounded text-sm hover:bg-green-600">
+                        <i class="fas fa-cloud-upload-alt mr-1"></i> 发布到GitHub
+                    </button>
+                    <button onclick="copyShareLink()" class="bg-blue-500 text-white px-4 py-2 rounded text-sm hover:bg-blue-600">
+                        <i class="fas fa-share-alt mr-1"></i> 复制分享链接
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- 设置模态框 -->
+        <div id="settingsModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-6 w-96">
+                <h3 class="text-lg font-semibold mb-4">
+                    <i class="fas fa-cog text-blue-500 mr-2"></i>GitHub发布设置
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">GitHub用户名</label>
+                        <input type="text" id="githubUsername" 
+                               class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                               placeholder="例如：daijiaqi77" value="daijiaqi77">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">仓库名称</label>
+                        <input type="text" id="githubRepo" 
+                               class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                               placeholder="例如：galaxy-prd" value="galaxy-prd">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">
+                            Personal Access Token
+                            <a href="https://github.com/settings/tokens/new" target="_blank" 
+                               class="text-blue-500 text-xs ml-2 hover:underline">
+                                点击生成
+                            </a>
+                        </label>
+                        <input type="password" id="githubToken" 
+                               class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
+                               placeholder="以ghp_开头的token">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-2 mt-6">
+                    <button onclick="hideSettings()" class="bg-gray-100 text-gray-700 px-4 py-2 rounded hover:bg-gray-200">
+                        取消
+                    </button>
+                    <button onclick="saveSettings()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        保存
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 发布状态提示 -->
+        <div id="publishStatus" class="fixed top-4 right-4 bg-white rounded-lg shadow-lg p-4 hidden z-40">
+            <div class="flex items-center space-x-3">
+                <div class="publish-status">
+                    <i class="fas fa-spinner fa-spin text-blue-500 text-xl"></i>
+                </div>
+                <div>
+                    <p id="publishMessage" class="text-sm font-medium text-gray-900">正在发布到GitHub...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 主内容区 -->
+        <div class="flex-1 flex overflow-hidden">
+            <!-- 左侧：层级导航 -->
+            <aside class="w-64 bg-white border-r border-gray-200 flex flex-col flex-shrink-0">
+                <div class="p-4 border-b border-gray-200">
+                    <h3 class="text-sm font-semibold text-gray-700 flex items-center">
+                        <i class="fas fa-sitemap text-blue-500 mr-2"></i> PRD结构
+                    </h3>
+                </div>
+                <div id="hierarchyTree" class="flex-1 overflow-y-auto p-3">
+                    <!-- 动态生成 -->
+                </div>
+            </aside>
+
+            <!-- 中间：内容区 -->
+            <main class="flex-1 flex flex-col overflow-hidden">
+                <!-- 面包屑 -->
+                <div id="breadcrumb" class="bg-white border-b border-gray-200 px-6 py-2 text-sm flex items-center">
+                    <!-- 动态生成 -->
+                </div>
+
+                <!-- 内容展示 -->
+                <div id="contentArea" class="flex-1 overflow-y-auto bg-gray-50">
+                    <!-- 界面视图 -->
+                    <div id="interfaceView" class="flex h-full">
+                        <!-- 左栏：PRD文档 -->
+                        <div class="w-1/2 border-r border-gray-200 bg-white overflow-y-auto">
+                            <div class="p-6">
+                                <div class="flex items-center justify-between mb-4">
+                                    <h2 id="interfaceTitle" class="text-xl font-bold text-gray-900"></h2>
+                                    <span id="interfaceStatus" class="text-xs px-2 py-1 rounded bg-green-100 text-green-700"></span>
+                                </div>
+                                
+                                <div id="interfacePRD" class="prose prose-sm max-w-none">
+                                    <!-- 动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 中栏：原型设计 -->
+                        <div class="w-1/2 border-r border-gray-200 bg-white overflow-y-auto">
+                            <div class="p-6">
+                                <h3 class="text-base font-semibold text-gray-900 mb-4 flex items-center">
+                                    <i class="fas fa-palette text-blue-500 mr-2"></i> 界面原型
+                                </h3>
+                                <div id="interfacePrototype" class="border-2 border-gray-200 rounded-lg bg-white min-h-96">
+                                    <!-- 动态生成 -->
+                                </div>
+                                
+                                <!-- 功能列表 -->
+                                <div class="mt-6">
+                                    <h4 class="text-sm font-semibold text-gray-700 mb-3">功能列表</h4>
+                                    <div id="featureList" class="space-y-2">
+                                        <!-- 动态生成 -->
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 功能视图 -->
+                    <div id="featureView" class="flex h-full hidden">
+                        <!-- 左栏：功能PRD -->
+                        <div class="w-1/2 border-r border-gray-200 bg-white overflow-y-auto">
+                            <div class="p-6">
+                                <div class="mb-4">
+                                    <span id="featureBreadcrumb" class="text-sm text-gray-500"></span>
+                                    <h2 id="featureTitle" class="text-xl font-bold text-gray-900 mt-1"></h2>
+                                </div>
+                                
+                                <div id="featurePRD" class="prose prose-sm max-w-none">
+                                    <!-- 动态生成 -->
+                                </div>
+                                
+                                <!-- 模式详情 -->
+                                <div id="modeDetails" class="mt-8">
+                                    <!-- 动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 右栏：子原型 + 模式切换 -->
+                        <div class="w-1/2 bg-white overflow-y-auto">
+                            <div class="p-6">
+                                <h3 class="text-base font-semibold text-gray-900 mb-4 flex items-center">
+                                    <i class="fas fa-puzzle-piece text-blue-500 mr-2"></i> 功能原型
+                                </h3>
+                                
+                                <!-- 模式切换标签 -->
+                                <div id="modeTabs" class="flex space-x-2 mb-4">
+                                    <!-- 动态生成 -->
+                                </div>
+                                
+                                <!-- 子原型 -->
+                                <div id="featurePrototype" class="border-2 border-gray-200 rounded-lg bg-white min-h-96">
+                                    <!-- 动态生成 -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <script>
+        // GitHub配置
+        let githubConfig = {
+            username: localStorage.getItem('github_username') || 'daijiaqi77',
+            repo: localStorage.getItem('github_repo') || 'galaxy-prd',
+            token: localStorage.getItem('github_token') || ''
+        };
+
+        // 数据模型（与之前相同）
+        let appState = {
+            currentView: 'interface',
+            currentNode: null,
+            currentFeature: null,
+            currentMode: 'phone',
+            data: {
+                name: '银河开发者平台',
+                version: 'v2.3',
+                interfaces: {
+                    'login': {
+                        id: 'login',
+                        name: '登录注册',
+                        status: '开发中',
+                        prd: {
+                            overview: '登录注册是用户进入平台的入口界面，为用户提供多种登录方式选择。',
+                            userStory: '作为**开发者**，我希望能够快速登录平台，以便立即开始我的开发工作。',
+                            requirements: [
+                                '提供清晰的登录入口',
+                                '支持多种登录方式',
+                                '记住用户登录状态',
+                                '提供登录失败的安全保护'
+                            ],
+                            layout: `\n1. 顶部：平台Logo和标语\n2. 左侧：产品介绍区域\n3. 右侧：登录表单区域\n   - 手机号输入框\n   - 验证码输入框\n   - 登录按钮\n   - 其他登录方式（微信）\n`,
+                            edgeCases: [
+                                '网络异常：显示重试按钮',
+                                '多次失败：临时锁定账号',
+                                '长时间未操作：自动退出'
+                            ]
+                        },
+                        prototype: 'login-interface',
+                        features: {
+                            'auth': {
+                                id: 'auth',
+                                name: '登录功能',
+                                type: 'core',
+                                prd: {
+                                    overview: '实现用户身份验证，支持手机号和微信两种登录模式。',
+                                    requirements: [
+                                        '手机号登录：验证码方式',
+                                        '微信登录：扫码授权',
+                                        '登录状态保持30天',
+                                        '登录失败限制：5次/小时'
+                                    ],
+                                    modes: ['手机号登录', '微信登录']
+                                },
+                                prototype: {
+                                    'phone': {
+                                        name: '手机号登录模式',
+                                        prototype: 'phone-login-prototype',
+                                        description: `\n### 手机号登录\n\n**输入规则**：\n- 手机号：11位数字，1开头，第二位3-9\n- 验证码：6位数字，有效期5分钟\n\n**交互流程**：\n1. 用户输入手机号\n2. 点击"获取验证码"\n3. 系统发送验证码，按钮显示60秒倒计时\n4. 用户输入验证码\n5. 点击"登录"按钮\n6. 验证通过，进入首页\n\n**错误处理**：\n\n| 场景 | 提示 |\n|------|------|\n| 手机号格式错误 | 请输入正确的手机号 |\n| 验证码错误 | 验证码错误，请重新输入 |\n| 验证码过期 | 验证码已过期，请重新获取 |\n| 发送频率过快 | 请等待60秒后重试 |\n`
+                                    },
+                                    'wechat': {
+                                        name: '微信登录模式',
+                                        prototype: 'wechat-login-prototype',
+                                        description: `\n### 微信登录\n\n**交互流程**：\n1. 用户点击"微信登录"按钮\n2. 弹出二维码弹窗\n3. 用户使用微信扫码\n4. 微信授权确认\n5. 系统获取用户信息\n6. 自动登录成功\n\n**技术要点**：\n- 二维码有效期：5分钟\n- 支持PC端扫码\n- 获取用户昵称、头像（需授权）\n\n**异常处理**：\n\n| 场景 | 处理 |\n|------|------|\n| 二维码过期 | 提示刷新二维码 |\n| 用户取消授权 | 返回登录页 |\n| 微信接口异常 | 提示稍后重试 |\n\n**关联逻辑**：\n- 首次微信登录：创建虚拟账号\n- 绑定手机号：引导用户绑定\n`
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        // 设置相关
+        function showSettings() {
+            document.getElementById('githubUsername').value = githubConfig.username;
+            document.getElementById('githubRepo').value = githubConfig.repo;
+            document.getElementById('githubToken').value = githubConfig.token;
+            document.getElementById('settingsModal').classList.remove('hidden');
+        }
+
+        function hideSettings() {
+            document.getElementById('settingsModal').classList.add('hidden');
+        }
+
+        function saveSettings() {
+            githubConfig.username = document.getElementById('githubUsername').value;
+            githubConfig.repo = document.getElementById('githubRepo').value;
+            githubConfig.token = document.getElementById('githubToken').value;
+            
+            localStorage.setItem('github_username', githubConfig.username);
+            localStorage.setItem('github_repo', githubConfig.repo);
+            localStorage.setItem('github_token', githubConfig.token);
+            
+            hideSettings();
+            alert('✅ 设置已保存！');
+        }
+
+        // 发布到GitHub
+        async function publishToGitHub() {
+            if (!githubConfig.token) {
+                alert('⚠️ 请先配置GitHub Token！\n\n点击右上角"设置"按钮，输入你的Personal Access Token。');
+                showSettings();
+                return;
+            }
+
+            const statusEl = document.getElementById('publishStatus');
+            const messageEl = document.getElementById('publishMessage');
+            statusEl.classList.remove('hidden');
+            
+            try {
+                // 获取当前HTML内容
+                const htmlContent = document.documentElement.outerHTML;
+                
+                // GitHub API创建或更新文件
+                const url = `https://api.github.com/repos/${githubConfig.username}/${githubConfig.repo}/contents/index.html`;
+                
+                // 先尝试获取现有文件（用于获取sha）
+                let sha = null;
+                try {
+                    const getResponse = await fetch(url, {
+                        headers: {
+                            'Authorization': `token ${githubConfig.token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+                    if (getResponse.ok) {
+                        const existingFile = await getResponse.json();
+                        sha = existingFile.sha;
+                    }
+                } catch (e) {
+                    // 文件不存在，继续创建
+                }
+                
+                messageEl.textContent = '正在上传文件...';
+                
+                // 上传文件
+                const payload = {
+                    message: '更新PRD文档',
+                    content: btoa(unescape(encodeURIComponent(htmlContent)))
+                };
+                
+                if (sha) {
+                    payload.sha = sha;
+                }
+                
+                const response = await fetch(url, {
+                    method: 'PUT',
+                    headers: {
+                        'Authorization': `token ${githubConfig.token}`,
+                        'Accept': 'application/vnd.github.v3+json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (response.ok) {
+                    messageEl.textContent = '✅ 发布成功！';
+                    setTimeout(() => {
+                        statusEl.classList.add('hidden');
+                        const shareUrl = `https://${githubConfig.username}.github.io/${githubConfig.repo}/`;
+                        alert(`🎉 发布成功！\n\n在线链接：${shareUrl}\n\n点击"复制分享链接"按钮，即可分享给开发团队。`);
+                    }, 1000);
+                } else {
+                    throw new Error('上传失败');
+                }
+                
+            } catch (error) {
+                messageEl.textContent = '❌ 发布失败';
+                setTimeout(() => {
+                    statusEl.classList.add('hidden');
+                    alert(`❌ 发布失败：${error.message}\n\n请检查：\n1. Token是否正确\n2. 仓库是否存在\n3. 网络是否正常`);
+                }, 1000);
+            }
+        }
+
+        // 复制分享链接
+        function copyShareLink() {
+            if (!githubConfig.username || !githubConfig.repo) {
+                alert('⚠️ 请先配置GitHub设置！');
+                return;
+            }
+            
+            const shareUrl = `https://${githubConfig.username}.github.io/${githubConfig.repo}/`;
+            
+            navigator.clipboard.writeText(shareUrl).then(() => {
+                alert(`✅ 分享链接已复制！\n\n${shareUrl}\n\n直接发给开发团队即可。`);
+            }).catch(() => {
+                alert(`分享链接：${shareUrl}`);
+            });
+        }
+
+        // 初始化和渲染函数（与之前相同）
+        function init() {
+            loadData();
+            renderTree();
+            showInterface('login');
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('galaxyPRD_final');
+            if (saved) {
+                appState.data = JSON.parse(saved);
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('galaxyPRD_final', JSON.stringify(appState.data));
+        }
+
+        function renderTree() {
+            const treeEl = document.getElementById('hierarchyTree');
+            let html = '';
+            Object.entries(appState.data.interfaces).forEach(([intId, int]) => {
+                html += `
+                    <div class="mb-2">
+                        <div class="tree-node p-2 rounded ${appState.currentNode === intId ? 'active' : ''}"
+                             onclick="showInterface('${intId}')">
+                            <i class="fas fa-window-maximize text-blue-500 mr-2"></i>
+                            <span class="font-medium">${int.name}</span>
+                            <span class="text-xs text-gray-400 ml-2">${int.status}</span>
+                        </div>
+                `;
+                Object.entries(int.features).forEach(([featId, feat]) => {
+                    html += `
+                        <div class="ml-4 mt-1">
+                            <div class="tree-node p-2 rounded text-sm ${appState.currentFeature === featId ? 'active' : ''}"
+                                 onclick="showFeature('${intId}', '${featId}')">
+                                <i class="fas fa-cog text-purple-500 mr-2"></i>
+                                ${feat.name}
+                            </div>
+                        </div>
+                    `;
+                });
+                html += `</div>`;
+            });
+            treeEl.innerHTML = html;
+        }
+
+        function showInterface(interfaceId) {
+            appState.currentView = 'interface';
+            appState.currentNode = interfaceId;
+            appState.currentFeature = null;
+            
+            const int = appState.data.interfaces[interfaceId];
+            
+            document.getElementById('interfaceTitle').textContent = int.name;
+            document.getElementById('interfaceStatus').textContent = int.status;
+            
+            document.getElementById('interfacePRD').innerHTML = `
+                <h3>功能概述</h3>
+                <p>${int.prd.overview}</p>
+                <h3>用户故事</h3>
+                <p>${int.prd.userStory || '待补充'}</p>
+                <h3>核心需求</h3>
+                ${int.prd.requirements.length > 0 ? `
+                    <ul>
+                        ${int.prd.requirements.map(r => `<li>${r}</li>`).join('')}
+                    </ul>
+                ` : '<p class="text-gray-500">待补充</p>'}
+                <h3>页面布局</h3>
+                <pre><code>${int.prd.layout || '待补充'}</code></pre>
+                <h3>异常处理</h3>
+                ${int.prd.edgeCases.length > 0 ? `
+                    <ul>
+                        ${int.prd.edgeCases.map(e => `<li>${e}</li>`).join('')}
+                    </ul>
+                ` : '<p class="text-gray-500">待补充</p>'}
+            `;
+            
+            renderInterfacePrototype(interfaceId);
+            renderFeatureList(interfaceId);
+            
+            document.getElementById('interfaceView').classList.remove('hidden');
+            document.getElementById('featureView').classList.add('hidden');
+            
+            renderTree();
+            updateBreadcrumb();
+        }
+
+        function showFeature(interfaceId, featureId) {
+            appState.currentView = 'feature';
+            appState.currentNode = interfaceId;
+            appState.currentFeature = featureId;
+            
+            const int = appState.data.interfaces[interfaceId];
+            const feat = int.features[featureId];
+            
+            document.getElementById('featureBreadcrumb').textContent = `${int.name} > `;
+            document.getElementById('featureTitle').textContent = feat.name;
+            
+            document.getElementById('featurePRD').innerHTML = `
+                <h3>功能概述</h3>
+                <p>${feat.prd.overview}</p>
+                <h3>功能需求</h3>
+                <ul>
+                    ${feat.prd.requirements.map(r => `<li>${r}</li>`).join('')}
+                </ul>
+                <h3>功能模式</h3>
+                <p>本功能支持以下${feat.prd.modes.length}种实现模式：</p>
+                <ul>
+                    ${feat.prd.modes.map(m => `<li>${m}</li>`).join('')}
+                </ul>
+            `;
+            
+            renderModeDetails(featureId);
+            renderModeTabs(featureId);
+            renderFeaturePrototype(featureId, appState.currentMode);
+            
+            document.getElementById('interfaceView').classList.add('hidden');
+            document.getElementById('featureView').classList.remove('hidden');
+            
+            renderTree();
+            updateBreadcrumb();
+        }
+
+        function renderInterfacePrototype(interfaceId) {
+            const prototypeEl = document.getElementById('interfacePrototype');
+            if (interfaceId === 'login') {
+                prototypeEl.innerHTML = `
+                    <svg width="100%" height="500" viewBox="0 0 600 500">
+                        <rect x="0" y="0" width="600" height="160" fill="#3b82f6"/>
+                        <text x="300" y="60" text-anchor="middle" fill="white" font-size="24" font-weight="bold">银河开发者平台</text>
+                        <text x="300" y="90" text-anchor="middle" fill="white" fill-opacity="0.8" font-size="14">开发者首选平台</text>
+                        <rect x="40" y="180" width="250" height="280" rx="8" fill="white" filter="drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))"/>
+                        <text x="60" y="210" font-size="16" font-weight="bold" fill="#1f2937">开发者首选平台</text>
+                        <text x="60" y="235" font-size="12" fill="#6b7280">一站式开发工具与资源</text>
+                        <text x="60" y="270" font-size="12" fill="#6b7280">• 快速部署</text>
+                        <text x="60" y="290" font-size="12" fill="#6b7280">• API管理</text>
+                        <text x="60" y="310" font-size="12" fill="#6b7280">• 数据分析</text>
+                        <rect x="310" y="180" width="250" height="280" rx="8" fill="white" filter="drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1))"/>
+                        <text x="435" y="210" text-anchor="middle" font-size="18" font-weight="bold" fill="#1f2937">登录</text>
+                        <rect x="330" y="240" width="210" height="40" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+                        <text x="345" y="265" font-size="12" fill="#9ca3af">手机号</text>
+                        <rect x="330" y="300" width="130" height="40" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+                        <text x="345" y="325" font-size="12" fill="#9ca3af">验证码</text>
+                        <rect x="480" y="300" width="60" height="40" rx="4" fill="#3b82f6"/>
+                        <text x="510" y="325" text-anchor="middle" font-size="10" fill="white">获取验证码</text>
+                        <rect x="330" y="360" width="210" height="45" rx="4" fill="#3b82f6"/>
+                        <text x="435" y="388" text-anchor="middle" font-size="14" fill="white">登录</text>
+                        <rect x="330" y="420" width="210" height="35" rx="4" fill="#07c160"/>
+                        <text x="435" y="443" text-anchor="middle" font-size="12" fill="white">微信登录</text>
+                        <circle cx="560" cy="265" r="12" fill="#3b82f6"/>
+                        <text x="560" y="270" text-anchor="middle" fill="white" font-size="10">1</text>
+                        <text x="580" y="270" font-size="10" fill="#3b82f6">格式校验</text>
+                        <circle cx="560" cy="325" r="12" fill="#3b82f6"/>
+                        <text x="560" y="330" text-anchor="middle" fill="white" font-size="10">2</text>
+                        <text x="580" y="330" font-size="10" fill="#3b82f6">倒计时</text>
+                    </svg>
+                `;
+            } else {
+                prototypeEl.innerHTML = '<p class="text-center text-gray-400 p-8">原型设计待完善</p>';
+            }
+        }
+
+        function renderFeatureList(interfaceId) {
+            const listEl = document.getElementById('featureList');
+            const int = appState.data.interfaces[interfaceId];
+            if (Object.keys(int.features).length === 0) {
+                listEl.innerHTML = '<p class="text-sm text-gray-400">暂无功能</p>';
+                return;
+            }
+            listEl.innerHTML = Object.entries(int.features).map(([featId, feat]) => `
+                <div onclick="showFeature('${interfaceId}', '${featId}')"
+                     class="p-3 border border-gray-200 rounded cursor-pointer hover:bg-gray-50 transition-all">
+                    <div class="font-medium text-sm text-gray-900">${feat.name}</div>
+                    <div class="text-xs text-gray-500 mt-1">
+                        <span class="text-purple-600">${feat.prd.modes.length}种模式</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderModeDetails(featureId) {
+            const feat = appState.data.interfaces[appState.currentNode].features[featureId];
+            const modesEl = document.getElementById('modeDetails');
+            modesEl.innerHTML = `
+                <h3>模式详细说明</h3>
+                <div class="grid grid-cols-1 gap-4">
+                    ${Object.entries(feat.prototype).map(([modeId, mode]) => `
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <h4 class="font-semibold text-gray-900 mb-2">${mode.name}</h4>
+                            <div class="prose prose-xs">
+                                ${marked.parse(mode.description)}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function renderModeTabs(featureId) {
+            const feat = appState.data.interfaces[appState.currentNode].features[featureId];
+            const tabsEl = document.getElementById('modeTabs');
+            tabsEl.innerHTML = Object.entries(feat.prototype).map(([modeId, mode]) => `
+                <div class="mode-tab ${appState.currentMode === modeId ? 'active' : ''}"
+                     onclick="switchMode('${modeId}')">
+                    ${mode.name}
+                </div>
+            `).join('');
+        }
+
+        function switchMode(modeId) {
+            appState.currentMode = modeId;
+            renderModeTabs(appState.currentFeature);
+            renderFeaturePrototype(appState.currentFeature, modeId);
+        }
+
+        function renderFeaturePrototype(featureId, modeId) {
+            const feat = appState.data.interfaces[appState.currentNode].features[featureId];
+            const mode = feat.prototype[modeId];
+            const prototypeEl = document.getElementById('featurePrototype');
+            
+            if (modeId === 'phone') {
+                prototypeEl.innerHTML = `
+                    <svg width="100%" height="400" viewBox="0 0 400 400">
+                        <rect x="50" y="20" width="300" height="360" rx="8" fill="white" stroke="#e5e7eb"/>
+                        <text x="200" y="60" text-anchor="middle" font-size="18" font-weight="bold">手机号登录</text>
+                        <rect x="80" y="100" width="240" height="50" rx="4" fill="#f9fafb" stroke="#3b82f6"/>
+                        <text x="95" y="130" font-size="14" fill="#9ca3af">手机号</text>
+                        <text x="80" y="165" font-size="10" fill="#10b981">✓ 手机号格式正确</text>
+                        <rect x="80" y="200" width="150" height="50" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+                        <text x="95" y="230" font-size="14" fill="#9ca3af">验证码</text>
+                        <rect x="250" y="200" width="70" height="50" rx="4" fill="#3b82f6"/>
+                        <text x="285" y="230" text-anchor="middle" font-size="12" fill="white">58s</text>
+                        <rect x="80" y="280" width="240" height="50" rx="4" fill="#3b82f6"/>
+                        <text x="200" y="310" text-anchor="middle" font-size="16" fill="white">登录</text>
+                        <text x="200" y="360" text-anchor="middle" font-size="10" fill="#6b7280">点击"获取验证码"后按钮显示倒计时</text>
+                    </svg>
+                `;
+            } else if (modeId === 'wechat') {
+                prototypeEl.innerHTML = `
+                    <svg width="100%" height="400" viewBox="0 0 400 400">
+                        <rect x="50" y="20" width="300" height="360" rx="8" fill="white" stroke="#e5e7eb" filter="drop-shadow(0 4px 6px rgba(0, 0, 0, 0.1))"/>
+                        <text x="200" y="60" text-anchor="middle" font-size="18" font-weight="bold">微信扫码登录</text>
+                        <rect x="100" y="80" width="200" height="200" fill="#f3f4f6" stroke="#e5e7eb"/>
+                        <rect x="120" y="100" width="160" height="160" fill="#1f2937" rx="4"/>
+                        <text x="200" y="190" text-anchor="middle" fill="white" font-size="40">⬛⬜</text>
+                        <text x="200" y="300" text-anchor="middle" font-size="12" fill="#6b7280">请使用微信扫描二维码</text>
+                        <text x="200" y="320" text-anchor="middle" font-size="10" fill="#9ca3af">二维码有效期：5分钟</text>
+                        <rect x="150" y="340" width="100" height="30" rx="4" fill="#f3f4f6" stroke="#e5e7eb"/>
+                        <text x="200" y="360" text-anchor="middle" font-size="12" fill="#6b7280">刷新二维码</text>
+                    </svg>
+                `;
+            }
+        }
+
+        function updateBreadcrumb() {
+            const breadcrumbEl = document.getElementById('breadcrumb');
+            let html = `
+                <span class="cursor-pointer hover:text-blue-600">
+                    <i class="fas fa-home mr-1"></i>银河开发者平台
+                </span>
+            `;
+            if (appState.currentNode) {
+                const int = appState.data.interfaces[appState.currentNode];
+                html += `
+                    <span class="mx-2 text-gray-400">/</span>
+                    <span class="${!appState.currentFeature ? 'font-semibold' : 'cursor-pointer hover:text-blue-600'}"
+                          onclick="showInterface('${appState.currentNode}')">
+                        ${int.name}
+                    </span>
+                `;
+                if (appState.currentFeature) {
+                    const feat = int.features[appState.currentFeature];
+                    html += `
+                        <span class="mx-2 text-gray-400">/</span>
+                        <span class="font-semibold">${feat.name}</span>
+                    `;
+                }
+            }
+            breadcrumbEl.innerHTML = html;
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
